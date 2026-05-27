@@ -22,6 +22,8 @@ const configSchema = z.object({
     type: z.enum(["sqlite", "memory"]).default("memory"),
     path: z.string().default("./sessions.db"),
   }).default({}),
+  a2a_proxy_port: z.number().positive().default(28091),
+  known_agents: z.array(z.string()).default([]),
   agent_card: z.object({
     skills: z.array(z.object({
       id: z.string(),

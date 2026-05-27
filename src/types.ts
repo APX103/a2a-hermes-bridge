@@ -17,6 +17,8 @@ export interface BridgeConfig {
     max_workers: number;
   };
   session_store: { type: "sqlite" | "memory"; path: string };
+  a2a_proxy_port: number;
+  known_agents: string[];
   agent_card: {
     skills: Array<{ id: string; name: string; description: string }>;
     capabilities: { streaming: boolean };

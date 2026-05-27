@@ -95,4 +95,87 @@ export class PlatformClient {
     // This allows crash-recovery and intentional restarts without
     // losing the agent record.
   }
+
+  async sendToAgent(
+    targetAgent: string,
+    message: string,
+    contextId?: string,
+  ): Promise<{ response: string; status: string; error?: string }> {
+    const rpcReq = {
+      jsonrpc: "2.0" as const,
+      id: `hermes-out-${Date.now()}`,
+      method: "agent",
+      params: {
+        ...(contextId ? { contextID: contextId } : {}),
+        message: { role: "user", parts: [{ text: message }] },
+      },
+    };
+
+    const res = await fetch(`${this.baseUrl}/agent/${targetAgent}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-A2A-Source-Agent": this.agentName,
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify(rpcReq),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return { response: "", status: "failed", error: `HTTP ${res.status}: ${text}` };
+    }
+
+    if (!res.body) {
+      return { response: "", status: "failed", error: "empty response body" };
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let fullText = "";
+    let finalMessage = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          buffer += decoder.decode();
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6).trim();
+            if (!data) continue;
+            try {
+              const event = JSON.parse(data);
+              if (event.type === "text.delta" && event.text) {
+                fullText += event.text;
+              } else if (event.type === "task.status" && event.status) {
+                if (event.status.state === "completed" && event.status.message?.parts?.[0]?.text) {
+                  finalMessage = event.status.message.parts[0].text;
+                }
+              }
+            } catch { /* ignore malformed JSON */ }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    const responseText = finalMessage || fullText;
+    return { response: responseText, status: "completed" };
+  }
+
+  async getAgentCard(name: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/.well-known/agent-card/${name}`);
+    if (!res.ok) throw new Error(`Agent card fetch failed: ${res.status}`);
+    return res.json();
+  }
 }

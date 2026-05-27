@@ -7,6 +7,7 @@ import { createSessionStore } from "./session-store";
 import { MessageHandler } from "./message-handler";
 import { PlatformClient } from "./platform-client";
 import { PullPoller } from "./pull/poller";
+import { A2AProxyServer } from "./a2a-proxy";
 
 function parseArgs(): string {
   const args = process.argv.slice(2);
@@ -44,9 +45,13 @@ async function main() {
     maxWorkers: config.pull.max_workers,
   });
 
+  const a2aProxy = new A2AProxyServer({ config, platformClient });
+  a2aProxy.start();
+
   const shutdown = async () => {
     console.log("[STOP] shutting down...");
     poller.stop();
+    a2aProxy.stop();
     await platformClient.deregister(config.agent_name).catch(() => {});
     process.exit(0);
   };
