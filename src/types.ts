@@ -5,7 +5,6 @@ export interface BridgeConfig {
   agent_description: string;
   agent_version: string;
   platform_url: string;
-  admin_token: string;
   hermes_url: string;
   hermes_api_key: string;
   hermes_model: string;

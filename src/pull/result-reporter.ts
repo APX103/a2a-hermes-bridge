@@ -2,7 +2,7 @@ import type { PlatformClient } from "../platform-client";
 import type { EventOutput } from "../types";
 
 export class ResultReporter implements EventOutput {
-  private pending = Promise.resolve();
+  private pending: Promise<unknown> = Promise.resolve();
 
   constructor(
     private platformClient: PlatformClient,
@@ -10,8 +10,8 @@ export class ResultReporter implements EventOutput {
     private deliveryId: string,
   ) {}
 
-  private enqueue(task: () => Promise<void>): void {
-    this.pending = this.pending.then(task).catch((e) => {
+  private enqueue(task: () => Promise<unknown>): void {
+    this.pending = this.pending.then(() => task()).catch((e) => {
       console.error(`[REPORT] queued task failed: ${e?.message ?? e}`);
     });
   }

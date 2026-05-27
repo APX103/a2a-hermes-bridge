@@ -2,17 +2,13 @@ import type { BridgeConfig, PendingMessage, TaskResult } from "./types";
 
 export class PlatformClient {
   private baseUrl: string;
-  private adminToken: string;
 
   constructor(config: BridgeConfig) {
     this.baseUrl = config.platform_url.replace(/\/+$/, "");
-    this.adminToken = config.admin_token;
   }
 
   private headers(): Record<string, string> {
-    const h: Record<string, string> = { "Content-Type": "application/json" };
-    if (this.adminToken) h["X-Admin-Token"] = this.adminToken;
-    return h;
+    return { "Content-Type": "application/json" };
   }
 
   async registerAsPull(config: {
@@ -66,7 +62,7 @@ export class PlatformClient {
 
   async deregister(agentName: string): Promise<void> {
     await fetch(`${this.baseUrl}/api/agents/${agentName}`, {
-      method: "DELETE", headers: { "X-Admin-Token": this.adminToken },
+      method: "DELETE", headers: this.headers(),
     }).catch(() => {});
   }
 }

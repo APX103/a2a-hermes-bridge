@@ -6,7 +6,7 @@ const configSchema = z.object({
   agent_description: z.string().default("Hermes AI Agent"),
   agent_version: z.string().default("1.0.0"),
   platform_url: z.string().url(),
-  admin_token: z.string().default(""),
+
   hermes_url: z.string().url(),
   hermes_api_key: z.string().default(""),
   hermes_model: z.string().default("hermes-agent"),
@@ -35,7 +35,7 @@ const configSchema = z.object({
 export function loadConfig(raw: Record<string, unknown>): BridgeConfig {
   const envOverrides: Record<string, unknown> = {};
   if (process.env.HERMES_BRIDGE_PLATFORM_URL) envOverrides.platform_url = process.env.HERMES_BRIDGE_PLATFORM_URL;
-  if (process.env.HERMES_BRIDGE_ADMIN_TOKEN) envOverrides.admin_token = process.env.HERMES_BRIDGE_ADMIN_TOKEN;
+
   if (process.env.HERMES_BRIDGE_HERMES_URL) envOverrides.hermes_url = process.env.HERMES_BRIDGE_HERMES_URL;
   if (process.env.HERMES_BRIDGE_HERMES_API_KEY) envOverrides.hermes_api_key = process.env.HERMES_BRIDGE_HERMES_API_KEY;
 
