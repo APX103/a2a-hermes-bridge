@@ -9,7 +9,7 @@ export class ResultReporter implements EventOutput {
   ) {}
 
   emitWorking(taskId: string, contextId?: string): void {
-    this.platformClient.submitFinal(this.agentName, this.deliveryId, taskId, "working").catch(() => {});
+    this.platformClient.submitDelta(this.agentName, this.deliveryId, taskId, "", "task.status").catch(() => {});
   }
 
   emitTextDelta(taskId: string, text: string, contextId?: string): void {

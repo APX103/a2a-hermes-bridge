@@ -37,10 +37,10 @@ export class PlatformClient {
     return data.messages ?? [];
   }
 
-  async submitDelta(agentName: string, deliveryId: string, taskId: string, text: string): Promise<void> {
+  async submitDelta(agentName: string, deliveryId: string, taskId: string, text: string, type?: string): Promise<void> {
     await fetch(`${this.baseUrl}/api/agents/${agentName}/results/delta`, {
       method: "POST", headers: this.headers(),
-      body: JSON.stringify({ delivery_id: deliveryId, task_id: taskId, type: "text.delta", text }),
+      body: JSON.stringify({ delivery_id: deliveryId, task_id: taskId, type: type ?? "text.delta", text }),
     });
   }
 
