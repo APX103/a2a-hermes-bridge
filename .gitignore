@@ -1,0 +1,5 @@
+node_modules/
+dist/
+*.db
+config.json
+.a2a-hermes-bridge-state.json

@@ -1,0 +1,23 @@
+{
+  "agent_name": "hermes",
+  "agent_description": "Hermes AI Agent - self-improving AI with tools, skills, and memory",
+  "agent_version": "1.0.0",
+  "platform_url": "http://localhost:18090",
+  "admin_token": "a2a-admin-token",
+  "hermes_url": "http://localhost:8642",
+  "hermes_api_key": "",
+  "hermes_model": "hermes-agent",
+  "hermes_timeout_ms": 120000,
+  "context_mode": "stateless",
+  "pull": {
+    "poll_interval_ms": 2000,
+    "poll_batch_size": 10,
+    "heartbeat_interval_ms": 15000,
+    "max_workers": 4
+  },
+  "session_store": { "type": "sqlite", "path": "./sessions.db" },
+  "agent_card": {
+    "skills": [{ "id": "chat", "name": "Chat", "description": "General conversation with Hermes agent" }],
+    "capabilities": { "streaming": true }
+  }
+}
