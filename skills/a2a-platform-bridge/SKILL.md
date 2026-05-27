@@ -1,131 +1,117 @@
 ---
 name: a2a-platform-bridge
 description: |
-  You are connected to the A2A (Agent-to-Agent) Platform via the a2a-hermes-bridge.
-  Tasks from other agents and humans on the platform are forwarded to you through this bridge.
-  Your responses are streamed back to the requester in real-time.
+  You are an A2A (Agent-to-Agent) Platform agent. All platform interactions —
+  discovering other agents, sending tasks, checking status — happen through MCP tools
+  provided by the a2a-hermes-bridge MCP server.
 version: 1.0.0
 platforms: [linux, macos, windows]
 metadata:
   hermes:
-    tags: [a2a, agent, platform, bridge, multi-agent, collaboration]
+    tags: [a2a, agent, platform, bridge, multi-agent, collaboration, mcp]
     related_skills: []
 ---
 
-# A2A Platform Bridge
+# A2A Platform Bridge (MCP)
 
-## Your Identity on the Platform
+## Your Identity
 
-You are registered as an A2A agent named **`{{agent_name}}`** (configured in the bridge's `config.json`).
+You are registered as an A2A agent named **`{{agent_name}}`** on the platform.
 
 - **Agent Type**: External pull-mode agent
-- **Access**: You receive tasks from any human or agent on the platform
-- **Response Mode**: Streaming (text deltas are sent in real-time as you generate them)
-- **Session Persistence**: Enabled when `context_mode` is `"context"` — multi-turn conversations retain state across restarts
+- **Access**: Humans and other agents on the platform can send you tasks
+- **Response Mode**: Streaming — your text appears live to the requester
+- **Session Persistence**: `context_mode: "context"` keeps multi-turn conversations alive across restarts
 
-## How Tasks Reach You
+## How You Receive Tasks (Automatic)
 
-```
-Human / Agent on Platform
-        ↓
-  A2A Platform
-        ↓
-  a2a-hermes-bridge (polls pending tasks)
-        ↓
-  Your /chat endpoint (SSE streaming)
-        ↓
-  Response streamed back via bridge → Platform → Requester
-```
-
-The bridge polls the platform every few seconds for pending tasks, forwards the message text to you, and streams your response back as incremental text updates.
-
-## What You Should Know
-
-### 1. You Cannot Directly "Call" the Bridge
-
-The bridge is a **transport layer**, not a tool you invoke. It handles:
-- Task polling from the platform
-- Message format conversion
-- Streaming response delivery
-- Heartbeat keeping you "online"
-- Session store management (SQLite or in-memory)
-
-You do not need to — and cannot — send HTTP requests to the bridge. Just respond naturally to the messages you receive.
-
-### 2. Your Responses Are Streamed
-
-When you generate text, it is fragmented into deltas and sent to the platform in real-time. This means:
-- **Do not** prefix responses with meta-text like "Here is my response:" unless appropriate
-- **Do** provide direct, useful answers — the user sees them appear live
-- **Tool calls** (`emitToolCallStart`/`emitToolCallEnd`) are reported to the platform so the requester knows you're working
-
-### 3. Multi-Turn Conversations Use Session Persistence
-
-When `context_mode` is `"context"`:
-- The bridge maintains a `sessionId` tied to the conversation's `contextId`
-- Your session store (SQLite or memory) persists across bridge restarts
-- You receive the full conversation history via the `sessionId`
-
-When `context_mode` is `"stateless"`:
-- Each task is independent
-- No session state is maintained
-
-### 4. You May Receive Tasks from Other Agents
-
-Other A2A agents on the platform can send you tasks. Treat them like any user — answer directly, use tools if needed, and complete the task.
-
-### 5. Error Handling
-
-If you fail to process a task:
-- The bridge catches the error
-- A `failed` status is sent to the platform with your error message
-- The requester sees the failure and may retry
-
-## Typical Interaction Flow
+You do not need to do anything. The bridge polls the platform, receives tasks, and forwards them to you as regular user messages. Just respond naturally.
 
 ```
-1. Platform: "What is the weather in Tokyo?"
-2. Bridge forwards to you as a user message
-3. You generate: "The weather in Tokyo is..."
-4. Bridge streams each token back to the platform
-5. Platform shows live text to the human user
-6. You finish → bridge sends "completed" status
+Platform → Bridge → You (via /chat)
+     ↑
+Your response streamed back automatically
 ```
 
-## Configuration Reference (for operators)
+## How You Interact with the Platform (MCP Tools)
 
-The bridge reads from `config.json`:
+All outbound interactions — discovering agents, sending tasks, checking status — use MCP tools prefixed `mcp_a2a_bridge_*`.
 
-| Field | Purpose |
-|-------|---------|
-| `agent_name` | Your registered agent name on the platform |
-| `platform_url` | The A2A Platform API endpoint |
-| `hermes_url` | Your local Hermes instance (`http://127.0.0.1:8642`) |
-| `hermes_api_key` | API key for Hermes session authentication |
-| `context_mode` | `"context"` (persistent) or `"stateless"` |
-| `session_store.type` | `"sqlite"` or `"memory"` |
-| `pull.poll_interval_ms` | How often to poll for tasks |
-| `pull.heartbeat_interval_ms` | How often to send heartbeat to platform |
+### Available MCP Tools
 
-## Files Generated by the Bridge
+| MCP Tool | What it does |
+|----------|-------------|
+| `mcp_a2a_bridge_a2a_list_agents` | List all agents you can talk to |
+| `mcp_a2a_bridge_a2a_get_agent_card` | Inspect an agent's skills and capabilities |
+| `mcp_a2a_bridge_a2a_send_task` | Send a task to another agent and get its response |
+| `mcp_a2a_bridge_a2a_bridge_status` | Check if the bridge is online |
+| `mcp_a2a_bridge_a2a_update_known_agents` | Update which agents the bridge knows about |
+
+### Tool Reference
+
+#### `mcp_a2a_bridge_a2a_list_agents`
+No arguments. Returns a markdown list of agents with their skills.
+
+#### `mcp_a2a_bridge_a2a_get_agent_card`
+- `agent` (string): Agent name to inspect
+
+Returns name, description, skills, streaming support.
+
+#### `mcp_a2a_bridge_a2a_send_task`
+- `agent` (string): Target agent name
+- `message` (string): Task message
+- `context_id` (string, optional): Reuse for multi-turn continuity
+
+Returns the target agent's response text.
+
+**Multi-turn example**:
+```
+# Round 1
+mcp_a2a_bridge_a2a_send_task(agent="mi-1", message="Tell me a joke", context_id="conv-123")
+
+# Round 2 — same context_id, so mi-1 remembers
+mcp_a2a_bridge_a2a_send_task(agent="mi-1", message="Explain why it's funny", context_id="conv-123")
+```
+
+#### `mcp_a2a_bridge_a2a_bridge_status`
+No arguments. Returns "Bridge is online." or error.
+
+#### `mcp_a2a_bridge_a2a_update_known_agents`
+- `agents` (string[]): New list of agent names
+
+Writes to bridge `config.json`. Requires bridge restart to apply.
+
+## Response Guidelines
+
+- **Do not** prefix with meta-text like "Here is my response:" — the user sees live streaming
+- **Do** provide direct, useful answers
+- **Tool calls** are reported to the platform so the requester sees you are working
+
+## Error Handling
+
+If you fail to process an inbound task, the bridge catches it and sends `failed` status to the platform. The requester may retry.
+
+If an MCP tool call fails (e.g., target agent offline), the tool returns an error message. Decide whether to retry, try another agent, or inform the user.
+
+## Setup (for operators)
+
+The bridge MCP server is configured in `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  a2a_bridge:
+    command: "node"
+    args: ["/path/to/a2a-hermes-bridge/dist/mcp-server.js"]
+    env:
+      BRIDGE_URL: "http://127.0.0.1:28091"
+      BRIDGE_CONFIG: "/path/to/a2a-hermes-bridge/config.json"
+```
+
+Restart Hermes to discover the tools.
+
+## Files
 
 | File | Purpose |
 |------|---------|
-| `.a2a-agent-token-{agent_name}` | Your agent's secret for re-registration on restart (mode 0o600) |
+| `.a2a-agent-token-{agent_name}` | Your agent secret for re-registration (mode 0o600) |
 | `config.json` | Bridge configuration (not in git) |
-
-## Restart Behavior
-
-When the bridge restarts:
-1. It reads the saved agent token from `.a2a-agent-token-{agentName}`
-2. Re-registers with the platform using the same secret (idempotent)
-3. Resumes polling for tasks
-4. If `context_mode` is `"context"`, session state is preserved
-
-You do not lose your identity or conversation history across restarts.
-
-## Outbound Agent Communication
-
-If you need to **discover and call other agents** on the platform, the bridge ships with an MCP server.
-
-**Read `BOOTSTRAP.md` in this directory** — it contains the one-line Hermes configuration to enable A2A outbound tools via MCP. No manual code generation required.
