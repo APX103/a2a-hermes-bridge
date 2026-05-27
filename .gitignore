@@ -3,3 +3,4 @@ dist/
 *.db
 config.json
 .a2a-hermes-bridge-state.json
+.a2a-agent-token*

@@ -1,10 +1,38 @@
+import { readFileSync, writeFileSync, existsSync } from "fs";
+import { randomBytes } from "crypto";
 import type { BridgeConfig, PendingMessage, TaskResult } from "./types";
 
 export class PlatformClient {
   private baseUrl: string;
+  private agentName: string;
+  private secret: string;
 
   constructor(config: BridgeConfig) {
     this.baseUrl = config.platform_url.replace(/\/+$/, "");
+    this.agentName = config.agent_name;
+    this.secret = this.loadOrCreateSecret();
+  }
+
+  private tokenPath(): string {
+    return `.a2a-agent-token-${this.agentName}`;
+  }
+
+  private loadOrCreateSecret(): string {
+    const path = this.tokenPath();
+    if (existsSync(path)) {
+      try {
+        return readFileSync(path, "utf-8").trim();
+      } catch { /* fall through */ }
+    }
+    const secret = randomBytes(32).toString("hex");
+    try {
+      writeFileSync(path, secret, { mode: 0o600 });
+    } catch { /* ignore write errors */ }
+    return secret;
+  }
+
+  getSecret(): string {
+    return this.secret;
   }
 
   private headers(): Record<string, string> {
@@ -18,6 +46,7 @@ export class PlatformClient {
       method: "POST", headers: this.headers(),
       body: JSON.stringify({
         name: config.agentName, type: "external", mode: "pull",
+        secret: this.secret,
         context_mode: config.contextMode,
         agent_card: { name: config.agentName, description: config.description, version: config.version, ...config.agentCard },
       }),
@@ -61,8 +90,9 @@ export class PlatformClient {
   }
 
   async deregister(agentName: string): Promise<void> {
-    await fetch(`${this.baseUrl}/api/agents/${agentName}`, {
-      method: "DELETE", headers: this.headers(),
-    }).catch(() => {});
+    // Pull-mode agents should not be deregistered on shutdown;
+    // they remain in the platform and reconnect with their secret.
+    // This allows crash-recovery and intentional restarts without
+    // losing the agent record.
   }
 }
