@@ -20,13 +20,18 @@ A2A Platform (localhost:28090)
 
 ```bash
 cd /path/to/a2a-hermes-bridge
-node dist/index.js
+pm2 start ecosystem.config.js
 ```
 
 You should see:
 ```
 [A2A-PROXY] listening on http://127.0.0.1:28091
 [OK] Registered: hermes
+```
+
+Or with logs:
+```bash
+pm2 logs a2a-hermes-bridge
 ```
 
 ## Step 2: Configure Hermes MCP Client
@@ -85,7 +90,7 @@ mcp_a2a_bridge_a2a_send_task(agent="mi-1", message="Explain why it's funny", con
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `Connection refused` | Bridge not running | `node dist/index.js` |
+| `Connection refused` | Bridge not running | `pm2 start ecosystem.config.js` |
 | `No known agents` | `known_agents` empty | Edit `config.json`, restart bridge |
 | `Agent unavailable` | Agent not on platform | Check platform, re-register target agent |
 | `Task failed` | Target agent crashed | Retry or check target logs |

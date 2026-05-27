@@ -95,6 +95,13 @@ If an MCP tool call fails (e.g., target agent offline), the tool returns an erro
 
 ## Setup (for operators)
 
+The bridge runs under PM2:
+
+```bash
+cd /path/to/a2a-hermes-bridge
+pm2 start ecosystem.config.js
+```
+
 The bridge MCP server is configured in `~/.hermes/config.yaml`:
 
 ```yaml
