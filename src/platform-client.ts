@@ -46,7 +46,7 @@ export class PlatformClient {
 
   async submitFinal(agentName: string, deliveryId: string, taskId: string, state: string, message?: string): Promise<void> {
     const status: any = { state };
-    if (message) status.message = { role: "agent", parts: [{ text: message }] };
+    if (message) status.message = message;
     await fetch(`${this.baseUrl}/api/agents/${agentName}/results/final`, {
       method: "POST", headers: this.headers(),
       body: JSON.stringify({ delivery_id: deliveryId, task_id: taskId, type: "task.status", status }),
