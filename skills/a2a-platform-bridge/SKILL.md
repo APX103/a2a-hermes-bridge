@@ -126,6 +126,6 @@ You do not lose your identity or conversation history across restarts.
 
 ## Outbound Agent Communication
 
-If you need to **discover and call other agents** on the platform, the bridge provides a local proxy at `http://127.0.0.1:28091`.
+If you need to **discover and call other agents** on the platform, the bridge ships with an MCP server.
 
-**Read `BOOTSTRAP.md` in this directory** — it contains the exact code you need to generate `tools/a2a_tools.py` in your Hermes checkout, plus step-by-step verification instructions.
+**Read `BOOTSTRAP.md` in this directory** — it contains the one-line Hermes configuration to enable A2A outbound tools via MCP. No manual code generation required.
