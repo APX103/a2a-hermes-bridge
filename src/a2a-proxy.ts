@@ -4,8 +4,10 @@ import type { BridgeConfig } from "./types";
 export interface A2AProxyOptions {
   config: BridgeConfig;
   platformClient: {
-    sendToAgent(name: string, message: string, contextId?: string): Promise<{ response: string; status: string; error?: string }>;
+    sendToAgent(name: string, message: string, options?: { contextId?: string; groupId?: string }): Promise<{ response: string; status: string; error?: string }>;
     getAgentCard(name: string): Promise<any>;
+    listGroups(): Promise<any[]>;
+    listGroupAgents(groupID: string): Promise<any[]>;
   };
 }
 
@@ -40,6 +42,7 @@ export class A2AProxyServer {
     res.setHeader("Content-Type", "application/json");
 
     try {
+      // Legacy endpoint: list known agents from config
       if (pathname === "/a2a/agents" && req.method === "GET") {
         const cards = await Promise.all(
           this.knownAgents
@@ -58,12 +61,31 @@ export class A2AProxyServer {
         return;
       }
 
+      // List groups
+      if (pathname === "/a2a/groups" && req.method === "GET") {
+        const groups = await this.platformClient.listGroups();
+        res.writeHead(200);
+        res.end(JSON.stringify({ groups }));
+        return;
+      }
+
+      // List agents in a group
+      if (pathname.startsWith("/a2a/groups/") && pathname.endsWith("/agents") && req.method === "GET") {
+        const groupID = pathname.slice("/a2a/groups/".length, -"/agents".length);
+        const agents = await this.platformClient.listGroupAgents(groupID);
+        res.writeHead(200);
+        res.end(JSON.stringify({ agents }));
+        return;
+      }
+
+      // Send task to agent
       if (pathname === "/a2a/send" && req.method === "POST") {
         const body = await readBody(req);
         const payload = JSON.parse(body);
         const targetAgent = payload.agent as string;
         const message = payload.message as string;
         const contextId = payload.context_id as string | undefined;
+        const groupId = payload.group_id as string | undefined;
 
         if (!targetAgent || !message) {
           res.writeHead(400);
@@ -71,12 +93,13 @@ export class A2AProxyServer {
           return;
         }
 
-        const result = await this.platformClient.sendToAgent(targetAgent, message, contextId);
+        const result = await this.platformClient.sendToAgent(targetAgent, message, { contextId, groupId });
         res.writeHead(result.status === "completed" ? 200 : 502);
         res.end(JSON.stringify(result));
         return;
       }
 
+      // Get agent card
       if (pathname.startsWith("/a2a/agent-card/") && req.method === "GET") {
         const name = pathname.slice("/a2a/agent-card/".length);
         const card = await this.platformClient.getAgentCard(name);

@@ -23,17 +23,6 @@ cd /path/to/a2a-hermes-bridge
 pm2 start ecosystem.config.js
 ```
 
-You should see:
-```
-[A2A-PROXY] listening on http://127.0.0.1:28091
-[OK] Registered: hermes
-```
-
-Or with logs:
-```bash
-pm2 logs a2a-hermes-bridge
-```
-
 ## Step 2: Configure Hermes MCP Client
 
 Edit **`~/.hermes/config.yaml`**:
@@ -48,51 +37,38 @@ mcp_servers:
       BRIDGE_CONFIG: "/path/to/a2a-hermes-bridge/config.json"
 ```
 
-Replace `/path/to/a2a-hermes-bridge` with the actual absolute path.
-
 ## Step 3: Restart Hermes
 
-Hermes will:
-1. Spawn the MCP server as a stdio subprocess
-2. Auto-discover 5 A2A tools
-3. Prefix them as `mcp_a2a_bridge_*`
+Hermes will spawn the MCP server and auto-discover 6 A2A tools.
 
 ## Step 4: Verify
 
-Ask Hermes to run:
+Ask Hermes to run the recommended workflow:
 
 ```
-mcp_a2a_bridge_a2a_list_agents
+mcp_a2a_bridge_a2a_list_groups
+mcp_a2a_bridge_a2a_list_group_agents(group_id="default-p2p")
+mcp_a2a_bridge_a2a_send_to_agent(agent="mi", message="hello", group_id="default-p2p")
 ```
 
-Expected output (example):
-```
-- mi-1: General conversation agent. Skills: Chat
-- mi-2: Data analysis agent. Skills: SQL, Visualization
-```
+Expected: Hermes lists groups → lists agents in default-p2p → sends message to mi → gets reply.
 
-Test sending a task:
+## Group-First Design
 
-```
-mcp_a2a_bridge_a2a_send_task(agent="mi-1", message="What is 2+2?")
-```
+Unlike naive agent-to-agent calls, the A2A platform uses **groups as collaboration boundaries**:
 
-## Multi-Turn Conversations
+1. `a2a_list_groups` — discover where you belong
+2. `a2a_list_group_agents` — discover who is in that group
+3. `a2a_send_to_agent` — send only within the group boundary
 
-Reuse `context_id` across calls:
-
-```
-mcp_a2a_bridge_a2a_send_task(agent="mi-1", message="Tell me a joke", context_id="conv-123")
-mcp_a2a_bridge_a2a_send_task(agent="mi-1", message="Explain why it's funny", context_id="conv-123")
-```
+This mirrors how the platform's built-in agents work.
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `Connection refused` | Bridge not running | `pm2 start ecosystem.config.js` |
-| `No known agents` | `known_agents` empty | Edit `config.json`, restart bridge |
-| `Agent unavailable` | Agent not on platform | Check platform, re-register target agent |
-| `Task failed` | Target agent crashed | Retry or check target logs |
-| MCP tools missing | Hermes MCP not configured | Check `config.yaml` syntax, restart Hermes |
-| MCP server crashes | Wrong `BRIDGE_CONFIG` path | Use absolute path |
+| `agent not found in group` | Target not in chosen group | Call `list_groups` then `list_group_agents` to find valid targets |
+| `group_id required` | Skipped `list_groups` | Always call `list_groups` first |
+| `bridge unreachable` | Bridge crashed | `pm2 logs a2a-hermes-bridge` |
+| MCP tools missing | Hermes MCP not configured | Check `config.yaml` syntax |

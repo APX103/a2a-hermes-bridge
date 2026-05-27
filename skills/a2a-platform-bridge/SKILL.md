@@ -35,63 +35,73 @@ Your response streamed back automatically
 
 ## How You Interact with the Platform (MCP Tools)
 
-All outbound interactions — discovering agents, sending tasks, checking status — use MCP tools prefixed `mcp_a2a_bridge_*`.
+All outbound interactions use MCP tools prefixed `mcp_a2a_bridge_*`.
+
+**Important rule**: Agent collaboration happens inside **groups**. You must call `a2a_list_groups` first, then `a2a_list_group_agents` with a group_id, before sending messages.
 
 ### Available MCP Tools
 
-| MCP Tool | What it does |
-|----------|-------------|
-| `mcp_a2a_bridge_a2a_list_agents` | List all agents you can talk to |
-| `mcp_a2a_bridge_a2a_get_agent_card` | Inspect an agent's skills and capabilities |
-| `mcp_a2a_bridge_a2a_send_task` | Send a task to another agent and get its response |
-| `mcp_a2a_bridge_a2a_bridge_status` | Check if the bridge is online |
-| `mcp_a2a_bridge_a2a_update_known_agents` | Update which agents the bridge knows about |
+| MCP Tool | What it does | When to use |
+|----------|-------------|-------------|
+| `mcp_a2a_bridge_a2a_list_groups` | List groups you are a member of | **Always call first** |
+| `mcp_a2a_bridge_a2a_list_group_agents` | List agents inside a chosen group | After `list_groups` |
+| `mcp_a2a_bridge_a2a_get_agent_card` | Inspect an agent's skills | Before sending a task |
+| `mcp_a2a_bridge_a2a_send_to_agent` | Send a task to an agent in a group | After choosing agent + group |
+| `mcp_a2a_bridge_a2a_bridge_status` | Check bridge health | Diagnostics |
+| `mcp_a2a_bridge_a2a_update_known_agents` | Update bridge config | Admin/ops only |
 
-### Tool Reference
+### Recommended Workflow
 
-#### `mcp_a2a_bridge_a2a_list_agents`
-No arguments. Returns a markdown list of agents with their skills.
+```
+1. mcp_a2a_bridge_a2a_list_groups
+   → pick a group_id (e.g., "default-p2p")
 
-#### `mcp_a2a_bridge_a2a_get_agent_card`
-- `agent` (string): Agent name to inspect
+2. mcp_a2a_bridge_a2a_list_group_agents(group_id="default-p2p")
+   → pick an agent name (e.g., "mi")
 
-Returns name, description, skills, streaming support.
+3. (optional) mcp_a2a_bridge_a2a_get_agent_card(agent="mi")
+   → verify capabilities
 
-#### `mcp_a2a_bridge_a2a_send_task`
-- `agent` (string): Target agent name
-- `message` (string): Task message
-- `context_id` (string, optional): Reuse for multi-turn continuity
+4. mcp_a2a_bridge_a2a_send_to_agent(
+     agent="mi",
+     message="...",
+     group_id="default-p2p",
+     context_id="conv-123"   // optional, reuse for multi-turn
+   )
+```
 
-Returns the target agent's response text.
+### Multi-Turn Conversations
 
-**Multi-turn example**:
+Reuse `context_id` across `a2a_send_to_agent` calls:
+
 ```
 # Round 1
-mcp_a2a_bridge_a2a_send_task(agent="mi-1", message="Tell me a joke", context_id="conv-123")
+mcp_a2a_bridge_a2a_send_to_agent(
+  agent="mi", message="Tell me a joke",
+  group_id="default-p2p", context_id="conv-123"
+)
 
-# Round 2 — same context_id, so mi-1 remembers
-mcp_a2a_bridge_a2a_send_task(agent="mi-1", message="Explain why it's funny", context_id="conv-123")
+# Round 2 — mi remembers prior context
+mcp_a2a_bridge_a2a_send_to_agent(
+  agent="mi", message="Explain why it's funny",
+  group_id="default-p2p", context_id="conv-123"
+)
 ```
 
-#### `mcp_a2a_bridge_a2a_bridge_status`
-No arguments. Returns "Bridge is online." or error.
-
-#### `mcp_a2a_bridge_a2a_update_known_agents`
-- `agents` (string[]): New list of agent names
-
-Writes to bridge `config.json`. Requires bridge restart to apply.
-
-## Response Guidelines
+### Response Guidelines
 
 - **Do not** prefix with meta-text like "Here is my response:" — the user sees live streaming
 - **Do** provide direct, useful answers
 - **Tool calls** are reported to the platform so the requester sees you are working
 
-## Error Handling
+### Error Handling
 
-If you fail to process an inbound task, the bridge catches it and sends `failed` status to the platform. The requester may retry.
+If you fail to process an inbound task, the bridge catches it and sends `failed` status.
 
-If an MCP tool call fails (e.g., target agent offline), the tool returns an error message. Decide whether to retry, try another agent, or inform the user.
+If an MCP tool fails (e.g., target agent not in group), the tool returns an error. Common causes:
+- `agent not found in group` → The agent is not a member of that group; pick another group or agent
+- `group_id required` → Call `a2a_list_groups` first
+- `bridge unreachable` → Bridge is down; check `a2a_bridge_status`
 
 ## Setup (for operators)
 

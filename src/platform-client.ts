@@ -96,17 +96,50 @@ export class PlatformClient {
     // losing the agent record.
   }
 
+  async getAgentCard(name: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/.well-known/agent-card/${name}`);
+    if (!res.ok) throw new Error(`Agent card fetch failed: ${res.status}`);
+    return res.json();
+  }
+
+  async listGroups(): Promise<any[]> {
+    const res = await fetch(`${this.baseUrl}/api/groups`);
+    if (!res.ok) throw new Error(`List groups failed: ${res.status}`);
+    const data: any = await res.json();
+    return Array.isArray(data) ? data : data.groups ?? [];
+  }
+
+  async listGroupAgents(groupID: string): Promise<any[]> {
+    const res = await fetch(`${this.baseUrl}/api/groups/${encodeURIComponent(groupID)}/members`);
+    if (!res.ok) throw new Error(`List group members failed: ${res.status}`);
+    const members: any[] = (await res.json()) as any[];
+    // Filter to agents only and enrich with agent cards
+    const agents: any[] = [];
+    for (const m of members) {
+      const actorType = m.actor_type ?? m.actorType ?? "";
+      const actorID = m.actor_id ?? m.actorID ?? "";
+      if (actorType !== "agent" || !actorID || actorID === this.agentName) continue;
+      try {
+        const card = await this.getAgentCard(actorID);
+        agents.push({ name: actorID, role: m.role ?? "", card });
+      } catch {
+        agents.push({ name: actorID, role: m.role ?? "" });
+      }
+    }
+    return agents;
+  }
+
   async sendToAgent(
     targetAgent: string,
     message: string,
-    contextId?: string,
+    options?: { contextId?: string; groupId?: string },
   ): Promise<{ response: string; status: string; error?: string }> {
     const rpcReq = {
       jsonrpc: "2.0" as const,
       id: `hermes-out-${Date.now()}`,
       method: "agent",
       params: {
-        ...(contextId ? { contextID: contextId } : {}),
+        ...(options?.contextId ? { contextID: options.contextId } : {}),
         message: { role: "user", parts: [{ text: message }] },
       },
     };
@@ -116,6 +149,7 @@ export class PlatformClient {
       headers: {
         "Content-Type": "application/json",
         "X-A2A-Source-Agent": this.agentName,
+        ...(options?.groupId ? { "X-A2A-Group-ID": options.groupId } : {}),
         Accept: "text/event-stream",
       },
       body: JSON.stringify(rpcReq),
@@ -171,11 +205,5 @@ export class PlatformClient {
 
     const responseText = finalMessage || fullText;
     return { response: responseText, status: "completed" };
-  }
-
-  async getAgentCard(name: string): Promise<any> {
-    const res = await fetch(`${this.baseUrl}/.well-known/agent-card/${name}`);
-    if (!res.ok) throw new Error(`Agent card fetch failed: ${res.status}`);
-    return res.json();
   }
 }
