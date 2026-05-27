@@ -67,7 +67,10 @@ export class HermesClient {
 
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        buffer += decoder.decode();
+        break;
+      }
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop()!;
@@ -83,14 +86,29 @@ export class HermesClient {
         } catch { /* skip malformed */ }
       }
     }
+
+    // Process any remaining line in buffer after stream ends
+    if (buffer) {
+      const trimmed = buffer.trim();
+      if (trimmed.startsWith("data: ")) {
+        const data = trimmed.slice(6);
+        if (data !== "[DONE]") {
+          try {
+            const parsed = JSON.parse(data);
+            const delta = parsed.choices?.[0]?.delta;
+            if (delta?.content) yield { type: "text", text: delta.content };
+          } catch { /* skip malformed */ }
+        }
+      }
+    }
   }
 
   async healthCheck(): Promise<{ ok: boolean; status?: string }> {
     try {
       const response = await fetch(`${this.baseUrl}/health`, { signal: AbortSignal.timeout(5000) });
       if (!response.ok) return { ok: false };
-      const data = await response.json();
-      return { ok: true, status: data.status };
+      const data = (await response.json()) as Record<string, unknown>;
+      return { ok: true, status: data.status as string | undefined };
     } catch {
       return { ok: false };
     }

@@ -10,7 +10,9 @@ export class PlatformClient {
   }
 
   private headers(): Record<string, string> {
-    return { "Content-Type": "application/json", "X-Admin-Token": this.adminToken };
+    const h: Record<string, string> = { "Content-Type": "application/json" };
+    if (this.adminToken) h["X-Admin-Token"] = this.adminToken;
+    return h;
   }
 
   async registerAsPull(config: {
@@ -38,19 +40,21 @@ export class PlatformClient {
   }
 
   async submitDelta(agentName: string, deliveryId: string, taskId: string, text: string, type?: string): Promise<void> {
-    await fetch(`${this.baseUrl}/api/agents/${agentName}/results/delta`, {
+    const res = await fetch(`${this.baseUrl}/api/agents/${agentName}/results/delta`, {
       method: "POST", headers: this.headers(),
       body: JSON.stringify({ delivery_id: deliveryId, task_id: taskId, type: type ?? "text.delta", text }),
     });
+    if (!res.ok) throw new Error(`Delta submission failed: ${res.status} ${await res.text()}`);
   }
 
   async submitFinal(agentName: string, deliveryId: string, taskId: string, state: string, message?: string): Promise<void> {
     const status: any = { state };
     if (message) status.message = message;
-    await fetch(`${this.baseUrl}/api/agents/${agentName}/results/final`, {
+    const res = await fetch(`${this.baseUrl}/api/agents/${agentName}/results/final`, {
       method: "POST", headers: this.headers(),
       body: JSON.stringify({ delivery_id: deliveryId, task_id: taskId, type: "task.status", status }),
     });
+    if (!res.ok) throw new Error(`Final submission failed: ${res.status} ${await res.text()}`);
   }
 
   async heartbeat(agentName: string): Promise<void> {

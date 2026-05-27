@@ -31,7 +31,7 @@ export interface JsonRpcRequest {
   id: string;
   method: string;
   params: {
-    contextId?: string;
+    contextID?: string;
     message: {
       role: string;
       parts: Array<{ text?: string }>;

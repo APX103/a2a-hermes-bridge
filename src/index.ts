@@ -3,7 +3,7 @@ import { resolve } from "path";
 import { loadConfig } from "./config";
 import type { BridgeConfig } from "./types";
 import { HermesClient } from "./hermes-client";
-import { InMemorySessionStore } from "./session-store";
+import { createSessionStore } from "./session-store";
 import { MessageHandler } from "./message-handler";
 import { PlatformClient } from "./platform-client";
 import { PullPoller } from "./pull/poller";
@@ -32,7 +32,7 @@ async function main() {
   if (!health.ok) { console.error(`[FATAL] Hermes not reachable at ${config.hermes_url}`); process.exit(1); }
   console.log(`[OK] Hermes connected`);
 
-  const sessionStore = new InMemorySessionStore();
+  const sessionStore = createSessionStore(config.session_store);
   const handler = new MessageHandler(hermesClient, sessionStore, config.context_mode);
   const platformClient = new PlatformClient(config);
 
@@ -63,8 +63,12 @@ async function main() {
     });
     console.log(`[OK] Registered: ${result.name}`);
   } catch (err: any) {
-    console.error(`[FATAL] Registration failed: ${err.message}`);
-    process.exit(1);
+    if (err.message?.includes("already registered")) {
+      console.log(`[OK] Already registered: ${config.agent_name}`);
+    } else {
+      console.error(`[FATAL] Registration failed: ${err.message}`);
+      process.exit(1);
+    }
   }
 
   poller.start();

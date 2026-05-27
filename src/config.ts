@@ -6,7 +6,7 @@ const configSchema = z.object({
   agent_description: z.string().default("Hermes AI Agent"),
   agent_version: z.string().default("1.0.0"),
   platform_url: z.string().url(),
-  admin_token: z.string().min(1),
+  admin_token: z.string().default(""),
   hermes_url: z.string().url(),
   hermes_api_key: z.string().default(""),
   hermes_model: z.string().default("hermes-agent"),
