@@ -45,7 +45,7 @@ async function main() {
     maxWorkers: config.pull.max_workers,
   });
 
-  const a2aProxy = new A2AProxyServer({ config, platformClient });
+  const a2aProxy = new A2AProxyServer({ config, platformClient, sessionStore });
   a2aProxy.start();
 
   const shutdown = async () => {

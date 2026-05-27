@@ -47,6 +47,22 @@ describe("MessageHandler", () => {
     expect(events[events.length - 1].type).toBe("completed");
   });
 
+  it("should save rootContextId to session store", async () => {
+    server = await mockHermes(19878);
+    const hermes = new HermesClient({ baseUrl: "http://localhost:19878", model: "test", timeoutMs: 5000 });
+    const store = new InMemorySessionStore();
+    const handler = new MessageHandler(hermes, store, "context");
+
+    const output: EventOutput = {
+      emitWorking() {}, emitTextDelta() {}, emitThinking() {}, emitToolCallStart() {}, emitToolCallEnd() {},
+      emitCompleted() {},
+      emitFailed() {},
+    };
+
+    await handler.handleMessage({ rpcId: "1", contextId: "ctx-abc", rootContextId: "root-xyz", messageParts: [{ text: "hi" }] }, output);
+    expect(await store.getRootContextId("ctx-abc")).toBe("root-xyz");
+  });
+
   it("should handle Hermes errors gracefully", async () => {
     const s = createServer((_req, res) => { res.writeHead(503); res.end("unavailable"); });
     await new Promise<void>((r) => s.listen(19877, () => r()));

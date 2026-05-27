@@ -88,6 +88,10 @@ mcp_a2a_bridge_a2a_send_to_agent(
 )
 ```
 
+### Call Chain Tracking (Automatic)
+
+The bridge automatically tracks `rootContextID` across agent-to-agent calls. When another agent sends you a task and you then call another agent via `a2a_send_to_agent`, the bridge silently propagates the root context so the platform can trace the entire call chain. You do **not** need to pass anything extra — just use `context_id` as usual.
+
 ### Response Guidelines
 
 - **Do not** prefix with meta-text like "Here is my response:" — the user sees live streaming

@@ -72,6 +72,7 @@ export class PullPoller {
       const result = await this.handler.handleMessage({
         rpcId: msg.jsonrpc.id,
         contextId: msg.jsonrpc.params?.contextID,
+        rootContextId: msg.jsonrpc.params?.rootContextID ?? msg.jsonrpc.params?.contextID,
         messageParts: msg.jsonrpc.params?.message?.parts ?? [],
       }, reporter);
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);

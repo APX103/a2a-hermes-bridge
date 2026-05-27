@@ -18,12 +18,28 @@ export class InMemorySessionStore implements SessionStore {
   }
 
   async putSession(contextId: string, hermesSessionId: string): Promise<void> {
+    const existing = this.sessions.get(contextId);
     const now = new Date();
-    this.sessions.set(contextId, { contextId, hermesSessionId, createdAt: now, lastUsed: now });
+    this.sessions.set(contextId, { contextId, hermesSessionId, rootContextId: existing?.rootContextId, createdAt: existing?.createdAt ?? now, lastUsed: now });
   }
 
   async deleteSession(contextId: string): Promise<void> { this.sessions.delete(contextId); }
   async listActive(): Promise<SessionRecord[]> { return Array.from(this.sessions.values()); }
+
+  async getRootContextId(contextId: string): Promise<string | null> {
+    return this.sessions.get(contextId)?.rootContextId ?? null;
+  }
+
+  async setRootContextId(contextId: string, rootContextId: string): Promise<void> {
+    const existing = this.sessions.get(contextId);
+    if (existing) {
+      existing.rootContextId = rootContextId;
+      existing.lastUsed = new Date();
+    } else {
+      const now = new Date();
+      this.sessions.set(contextId, { contextId, hermesSessionId: `hermes-${uuid().slice(0, 8)}`, rootContextId, createdAt: now, lastUsed: now });
+    }
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -38,10 +54,14 @@ export class SqliteSessionStore implements SessionStore {
       CREATE TABLE IF NOT EXISTS sessions (
         context_id TEXT PRIMARY KEY,
         hermes_session_id TEXT NOT NULL,
+        root_context_id TEXT,
         created_at TEXT NOT NULL,
         last_used TEXT NOT NULL
       )
     `);
+    try {
+      this.db.exec(`ALTER TABLE sessions ADD COLUMN root_context_id TEXT`);
+    } catch { /* column may already exist */ }
   }
 
   async getOrCreateSession(contextId: string): Promise<string> {
@@ -72,9 +92,12 @@ export class SqliteSessionStore implements SessionStore {
 
   async putSession(contextId: string, hermesSessionId: string): Promise<void> {
     const now = new Date().toISOString();
+    const existing = this.db.prepare("SELECT root_context_id FROM sessions WHERE context_id = ?").get(contextId) as
+      | { root_context_id: string | null }
+      | undefined;
     this.db.prepare(
-      "INSERT OR REPLACE INTO sessions (context_id, hermes_session_id, created_at, last_used) VALUES (?, ?, ?, ?)",
-    ).run(contextId, hermesSessionId, now, now);
+      "INSERT OR REPLACE INTO sessions (context_id, hermes_session_id, root_context_id, created_at, last_used) VALUES (?, ?, ?, ?, ?)",
+    ).run(contextId, hermesSessionId, existing?.root_context_id ?? null, now, now);
   }
 
   async deleteSession(contextId: string): Promise<void> {
@@ -82,18 +105,44 @@ export class SqliteSessionStore implements SessionStore {
   }
 
   async listActive(): Promise<SessionRecord[]> {
-    const rows = this.db.prepare("SELECT context_id, hermes_session_id, created_at, last_used FROM sessions").all() as Array<{
+    const rows = this.db.prepare("SELECT context_id, hermes_session_id, root_context_id, created_at, last_used FROM sessions").all() as Array<{
       context_id: string;
       hermes_session_id: string;
+      root_context_id: string | null;
       created_at: string;
       last_used: string;
     }>;
     return rows.map((r) => ({
       contextId: r.context_id,
       hermesSessionId: r.hermes_session_id,
+      rootContextId: r.root_context_id ?? undefined,
       createdAt: new Date(r.created_at),
       lastUsed: new Date(r.last_used),
     }));
+  }
+
+  async getRootContextId(contextId: string): Promise<string | null> {
+    const row = this.db.prepare("SELECT root_context_id FROM sessions WHERE context_id = ?").get(contextId) as
+      | { root_context_id: string | null }
+      | undefined;
+    return row?.root_context_id ?? null;
+  }
+
+  async setRootContextId(contextId: string, rootContextId: string): Promise<void> {
+    const row = this.db.prepare("SELECT hermes_session_id FROM sessions WHERE context_id = ?").get(contextId) as
+      | { hermes_session_id: string }
+      | undefined;
+    const now = new Date().toISOString();
+    if (row) {
+      this.db.prepare("UPDATE sessions SET root_context_id = ?, last_used = ? WHERE context_id = ?").run(
+        rootContextId, now, contextId,
+      );
+    } else {
+      const id = `hermes-${uuid().slice(0, 8)}`;
+      this.db.prepare(
+        "INSERT INTO sessions (context_id, hermes_session_id, root_context_id, created_at, last_used) VALUES (?, ?, ?, ?, ?)",
+      ).run(contextId, id, rootContextId, now, now);
+    }
   }
 }
 

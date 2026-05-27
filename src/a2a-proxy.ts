@@ -1,26 +1,29 @@
 import { createServer, IncomingMessage, ServerResponse } from "http";
-import type { BridgeConfig } from "./types";
+import type { BridgeConfig, SessionStore } from "./types";
 
 export interface A2AProxyOptions {
   config: BridgeConfig;
   platformClient: {
-    sendToAgent(name: string, message: string, options?: { contextId?: string; groupId?: string }): Promise<{ response: string; status: string; error?: string }>;
+    sendToAgent(name: string, message: string, options?: { contextId?: string; groupId?: string; rootContextId?: string }): Promise<{ response: string; status: string; error?: string }>;
     getAgentCard(name: string): Promise<any>;
     listGroups(): Promise<any[]>;
     listGroupAgents(groupID: string): Promise<any[]>;
   };
+  sessionStore?: SessionStore;
 }
 
 export class A2AProxyServer {
   private server = createServer(this.handleRequest.bind(this));
   private port: number;
   private platformClient: A2AProxyOptions["platformClient"];
+  private sessionStore?: SessionStore;
   private knownAgents: string[];
   private agentName: string;
 
   constructor(opts: A2AProxyOptions) {
     this.port = opts.config.a2a_proxy_port;
     this.platformClient = opts.platformClient;
+    this.sessionStore = opts.sessionStore;
     this.knownAgents = opts.config.known_agents;
     this.agentName = opts.config.agent_name;
   }
@@ -93,7 +96,12 @@ export class A2AProxyServer {
           return;
         }
 
-        const result = await this.platformClient.sendToAgent(targetAgent, message, { contextId, groupId });
+        let rootContextId: string | undefined;
+        if (contextId && this.sessionStore) {
+          const stored = await this.sessionStore.getRootContextId(contextId);
+          if (stored) rootContextId = stored;
+        }
+        const result = await this.platformClient.sendToAgent(targetAgent, message, { contextId, groupId, rootContextId });
         res.writeHead(result.status === "completed" ? 200 : 502);
         res.end(JSON.stringify(result));
         return;

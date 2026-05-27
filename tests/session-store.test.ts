@@ -35,6 +35,19 @@ describe("InMemorySessionStore", () => {
     await store.getOrCreateSession("ctx-2");
     expect((await store.listActive()).length).toBe(2);
   });
+
+  it("should set and get rootContextId", async () => {
+    await store.getOrCreateSession("ctx-1");
+    expect(await store.getRootContextId("ctx-1")).toBeNull();
+    await store.setRootContextId("ctx-1", "root-1");
+    expect(await store.getRootContextId("ctx-1")).toBe("root-1");
+  });
+
+  it("should set rootContextId before session exists", async () => {
+    await store.setRootContextId("ctx-new", "root-new");
+    expect(await store.getRootContextId("ctx-new")).toBe("root-new");
+    expect(await store.getSession("ctx-new")).toBeTruthy();
+  });
 });
 
 describe("SqliteSessionStore", () => {
@@ -84,5 +97,21 @@ describe("SqliteSessionStore", () => {
 
     const store2 = new SqliteSessionStore(path);
     expect(await store2.getSession("ctx-1")).toBe(id);
+  });
+
+  it("should set and get rootContextId", async () => {
+    await store.getOrCreateSession("ctx-1");
+    expect(await store.getRootContextId("ctx-1")).toBeNull();
+    await store.setRootContextId("ctx-1", "root-1");
+    expect(await store.getRootContextId("ctx-1")).toBe("root-1");
+  });
+
+  it("should persist rootContextId across instances", async () => {
+    await store.getOrCreateSession("ctx-1");
+    await store.setRootContextId("ctx-1", "root-1");
+    const path = join(tmpDir, "sessions.db");
+
+    const store2 = new SqliteSessionStore(path);
+    expect(await store2.getRootContextId("ctx-1")).toBe("root-1");
   });
 });

@@ -132,7 +132,7 @@ export class PlatformClient {
   async sendToAgent(
     targetAgent: string,
     message: string,
-    options?: { contextId?: string; groupId?: string },
+    options?: { contextId?: string; groupId?: string; rootContextId?: string },
   ): Promise<{ response: string; status: string; error?: string }> {
     const rpcReq = {
       jsonrpc: "2.0" as const,
@@ -140,6 +140,7 @@ export class PlatformClient {
       method: "agent",
       params: {
         ...(options?.contextId ? { contextID: options.contextId } : {}),
+        ...(options?.rootContextId ? { rootContextID: options.rootContextId } : {}),
         message: { role: "user", parts: [{ text: message }] },
       },
     };
@@ -150,6 +151,7 @@ export class PlatformClient {
         "Content-Type": "application/json",
         "X-A2A-Source-Agent": this.agentName,
         ...(options?.groupId ? { "X-A2A-Group-ID": options.groupId } : {}),
+        ...(options?.rootContextId ? { "X-A2A-Root-Context-ID": options.rootContextId } : {}),
         Accept: "text/event-stream",
       },
       body: JSON.stringify(rpcReq),

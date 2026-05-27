@@ -33,6 +33,7 @@ export interface JsonRpcRequest {
   method: string;
   params: {
     contextID?: string;
+    rootContextID?: string;
     message: {
       role: string;
       parts: Array<{ text?: string }>;
@@ -104,6 +105,7 @@ export interface EventOutput {
 export interface SessionRecord {
   contextId: string;
   hermesSessionId: string;
+  rootContextId?: string;
   createdAt: Date;
   lastUsed: Date;
 }
@@ -114,4 +116,6 @@ export interface SessionStore {
   putSession(contextId: string, hermesSessionId: string): Promise<void>;
   deleteSession(contextId: string): Promise<void>;
   listActive(): Promise<SessionRecord[]>;
+  getRootContextId(contextId: string): Promise<string | null>;
+  setRootContextId(contextId: string, rootContextId: string): Promise<void>;
 }

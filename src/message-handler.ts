@@ -16,7 +16,7 @@ export class MessageHandler {
   ) {}
 
   async handleMessage(
-    params: { rpcId: string; contextId?: string; messageParts: Array<{ text?: string }> },
+    params: { rpcId: string; contextId?: string; rootContextId?: string; messageParts: Array<{ text?: string }> },
     output: EventOutput,
   ): Promise<HandleResult> {
     const taskId = `hermes-${uuid().slice(0, 8)}`;
@@ -26,6 +26,11 @@ export class MessageHandler {
     if (!inputText.trim()) {
       output.emitFailed(taskId, "Empty message", contextId);
       return { taskId, status: "failed", message: "Empty message" };
+    }
+
+    if (contextId && params.rootContextId) {
+      try { await this.sessionStore.setRootContextId(contextId, params.rootContextId); }
+      catch { /* ignore */ }
     }
 
     let sessionId: string | undefined;
