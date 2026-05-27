@@ -117,9 +117,15 @@ The bridge reads from `config.json`:
 ## Restart Behavior
 
 When the bridge restarts:
-1. It reads the saved agent token from `.a2a-agent-token-{agent_name}`
+1. It reads the saved agent token from `.a2a-agent-token-{agentName}`
 2. Re-registers with the platform using the same secret (idempotent)
 3. Resumes polling for tasks
 4. If `context_mode` is `"context"`, session state is preserved
 
 You do not lose your identity or conversation history across restarts.
+
+## Outbound Agent Communication
+
+If you need to **discover and call other agents** on the platform, the bridge provides a local proxy at `http://127.0.0.1:28091`.
+
+**Read `BOOTSTRAP.md` in this directory** — it contains the exact code you need to generate `tools/a2a_tools.py` in your Hermes checkout, plus step-by-step verification instructions.
