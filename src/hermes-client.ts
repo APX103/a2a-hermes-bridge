@@ -82,6 +82,7 @@ export class HermesClient {
         try {
           const parsed = JSON.parse(data);
           const delta = parsed.choices?.[0]?.delta;
+          if (delta?.reasoning_content) yield { type: "thinking", text: delta.reasoning_content };
           if (delta?.content) yield { type: "text", text: delta.content };
         } catch { /* skip malformed */ }
       }
@@ -96,6 +97,7 @@ export class HermesClient {
           try {
             const parsed = JSON.parse(data);
             const delta = parsed.choices?.[0]?.delta;
+            if (delta?.reasoning_content) yield { type: "thinking", text: delta.reasoning_content };
             if (delta?.content) yield { type: "text", text: delta.content };
           } catch { /* skip malformed */ }
         }

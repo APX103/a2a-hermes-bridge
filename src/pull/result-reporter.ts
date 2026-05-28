@@ -35,7 +35,7 @@ export class ResultReporter implements EventOutput {
 
   emitThinking(taskId: string, text: string, contextId?: string): void {
     this.enqueue(() =>
-      this.platformClient.submitDelta(this.agentName, this.deliveryId, taskId, text)
+      this.platformClient.submitDelta(this.agentName, this.deliveryId, taskId, text, "thinking.delta")
     );
   }
 
