@@ -14,6 +14,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "pm2": "^5.4.3",
+    "prompts": "^2.4.2",
     "uuid": "^10.0.0",
     "zod": "^3.25.76"
   },
