@@ -8,7 +8,7 @@ export interface InitAnswers {
 }
 
 export async function promptForConfig(): Promise<InitAnswers> {
-  const questions = [
+  const questions: Array<prompts.PromptObject<string>> = [
     {
       type: "text",
       name: "platform_url",
