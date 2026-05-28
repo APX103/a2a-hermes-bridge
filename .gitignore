@@ -5,3 +5,8 @@ config.json
 .a2a-hermes-bridge-state.json
 .a2a-agent-token*
 logs
+
+# CLI logs
+~/.hermes/logs/
+*.log
+sessions.db
