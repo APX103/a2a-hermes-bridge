@@ -42,18 +42,24 @@ export class PlatformClient {
   async registerAsPull(config: {
     agentName: string; description: string; version: string; contextMode: string; agentCard: any;
   }): Promise<{ ok: boolean; name: string }> {
-    const res = await fetch(`${this.baseUrl}/api/agents`, {
-      method: "POST", headers: this.headers(),
-      body: JSON.stringify({
-        name: config.agentName, type: "external", mode: "pull",
-        secret: this.secret,
-        context_mode: config.contextMode,
-        agent_card: { name: config.agentName, description: config.description, version: config.version, ...config.agentCard },
-      }),
-    });
-    if (!res.ok) throw new Error(`Registration failed: ${res.status} ${await res.text()}`);
-    const data: any = await res.json();
-    return { ok: true, name: data.name ?? config.agentName };
+    const url = `${this.baseUrl}/api/agents`;
+    console.log(`[REGISTER] Connecting to platform at ${url}`);
+    try {
+      const res = await fetch(url, {
+        method: "POST", headers: this.headers(),
+        body: JSON.stringify({
+          name: config.agentName, type: "external", mode: "pull",
+          secret: this.secret,
+          context_mode: config.contextMode,
+          agent_card: { name: config.agentName, description: config.description, version: config.version, ...config.agentCard },
+        }),
+      });
+      if (!res.ok) throw new Error(`Registration failed: ${res.status} ${await res.text()}`);
+      const data: any = await res.json();
+      return { ok: true, name: data.name ?? config.agentName };
+    } catch (err: any) {
+      throw new Error(`Registration failed for ${url}: ${err.message}`);
+    }
   }
 
   async pollPending(agentName: string, limit: number): Promise<PendingMessage[]> {

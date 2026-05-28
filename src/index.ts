@@ -21,6 +21,7 @@ function parseArgs(): string {
 async function main() {
   const config: BridgeConfig = loadConfig(JSON.parse(readFileSync(resolve(parseArgs()), "utf-8")));
   console.log(`[START] a2a-hermes-bridge agent=${config.agent_name}`);
+  console.log(`[CONFIG] platform_url=${config.platform_url}, hermes_url=${config.hermes_url}`);
 
   const hermesClient = new HermesClient({
     baseUrl: config.hermes_url,
