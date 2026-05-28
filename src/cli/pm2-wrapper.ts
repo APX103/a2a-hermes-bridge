@@ -1,6 +1,6 @@
 import * as pm2 from "pm2";
 import { join } from "path";
-import { getDefaultConfigDir, getDefaultLogsDir } from "./config-path";
+import { getDefaultLogsDir } from "./config-path";
 
 const APP_NAME = "hermes-bridge";
 
