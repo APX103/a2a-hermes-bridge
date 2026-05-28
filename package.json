@@ -3,11 +3,15 @@
   "version": "0.1.0",
   "description": "Pull-mode bridge between A2A Platform and Hermes Agent",
   "main": "dist/index.js",
+  "bin": {
+    "hermes-bridge": "./bin/hermes-bridge"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts --config config.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare": "npm run build"
   },
   "engines": {
     "node": ">=18.0.0"
