@@ -105,14 +105,16 @@ export class HermesClient {
     }
   }
 
-  async healthCheck(): Promise<{ ok: boolean; status?: string }> {
+  async healthCheck(): Promise<{ ok: boolean; status?: string; error?: string }> {
     try {
       const response = await fetch(`${this.baseUrl}/health`, { signal: AbortSignal.timeout(5000) });
-      if (!response.ok) return { ok: false };
+      if (!response.ok) {
+        return { ok: false, error: `HTTP ${response.status}` };
+      }
       const data = (await response.json()) as Record<string, unknown>;
       return { ok: true, status: data.status as string | undefined };
-    } catch {
-      return { ok: false };
+    } catch (err: any) {
+      return { ok: false, error: err?.message ?? "Unknown error" };
     }
   }
 }

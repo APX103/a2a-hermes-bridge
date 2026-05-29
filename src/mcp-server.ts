@@ -2,17 +2,29 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, renameSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
 const BRIDGE_URL = process.env.BRIDGE_URL || "http://127.0.0.1:28091";
 const CONFIG_PATH = process.env.BRIDGE_CONFIG || "./config.json";
-const AGENT_NAME = process.env.AGENT_NAME || "hermes";
 
-const server = new Server(
-  { name: "a2a-bridge-mcp", version: "1.0.0" },
-  { capabilities: { tools: {} } },
-);
+export interface ToolHandlerOptions {
+  bridgeUrl?: string;
+  configPath?: string;
+  fetchImpl?: typeof fetch;
+}
+
+const DEFAULT_TIMEOUT_MS = 30000;
+
+function fetchWithTimeout(
+  input: string | URL | Request,
+  init?: RequestInit & { timeoutMs?: number },
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, ...rest } = init ?? {};
+  const signal = rest.signal ?? AbortSignal.timeout(timeoutMs);
+  return fetchImpl(input, { ...rest, signal });
+}
 
 const TOOLS = [
   {
@@ -74,20 +86,23 @@ const TOOLS = [
   },
 ];
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const name = request.params.name;
-  const args = request.params.arguments ?? {};
+export async function handleToolCall(
+  name: string,
+  args: Record<string, unknown>,
+  options: ToolHandlerOptions = {},
+): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
+  const bridgeUrl = options.bridgeUrl ?? BRIDGE_URL;
+  const configPath = options.configPath ?? CONFIG_PATH;
+  const _fetch = options.fetchImpl ?? fetch;
 
   if (name === "a2a_list_groups") {
     try {
-      const res = await fetch(`${BRIDGE_URL}/a2a/groups`);
+      const res = await fetchWithTimeout(`${bridgeUrl}/a2a/groups`, { timeoutMs: 10000 }, _fetch);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: any = await res.json();
+      const data = await res.json() as { groups?: Array<{ id?: string; ID?: string; name?: string; orchestration_mode?: string; mode?: string; status?: string }> };
       const groups = data.groups ?? [];
       if (!groups.length) return { content: [{ type: "text", text: "No groups found." }] };
-      const lines = groups.map((g: any) => {
+      const lines = groups.map((g) => {
         const id = g.id ?? g.ID ?? "?";
         const name = g.name ?? "Unnamed";
         const mode = g.orchestration_mode ?? g.mode ?? "unknown";
@@ -104,14 +119,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const groupID = String(args.group_id ?? "");
     if (!groupID) return { content: [{ type: "text", text: "group_id is required" }], isError: true };
     try {
-      const res = await fetch(`${BRIDGE_URL}/a2a/groups/${encodeURIComponent(groupID)}/agents`);
+      const res = await fetchWithTimeout(
+        `${bridgeUrl}/a2a/groups/${encodeURIComponent(groupID)}/agents`,
+        { timeoutMs: 10000 },
+        _fetch,
+      );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: any = await res.json();
+      const data = await res.json() as { agents?: Array<{ name?: string; role?: string; card?: { skills?: Array<{ name?: string; id?: string }> } }> };
       const agents = data.agents ?? [];
       if (!agents.length) return { content: [{ type: "text", text: `No agents found in group ${groupID}.` }] };
-      const lines = agents.map((a: any) => {
-        const skills = (a.card?.skills ?? []).map((s: any) => s.name || s.id || "?").join(", ");
-        return `  - ${a.name}${a.role ? ` (role: ${a.role})` : ""}${skills ? ` — skills: ${skills}` : ""}`;
+      const lines = agents.map((a) => {
+        const skills = (a.card?.skills ?? []).map((s) => s.name || s.id || "?").join(", ");
+        return `  - ${a.name ?? "?"}${a.role ? ` (role: ${a.role})` : ""}${skills ? ` — skills: ${skills}` : ""}`;
       });
       return { content: [{ type: "text", text: `Agents in group ${groupID}:\n${lines.join("\n")}` }] };
     } catch (err: any) {
@@ -123,10 +142,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const agent = String(args.agent ?? "");
     if (!agent) return { content: [{ type: "text", text: "agent is required" }], isError: true };
     try {
-      const res = await fetch(`${BRIDGE_URL}/a2a/agent-card/${encodeURIComponent(agent)}`);
+      const res = await fetchWithTimeout(
+        `${bridgeUrl}/a2a/agent-card/${encodeURIComponent(agent)}`,
+        { timeoutMs: 10000 },
+        _fetch,
+      );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const card: any = await res.json();
-      const skills = (card.skills ?? []).map((s: any) => s.name || s.id || "?").join(", ");
+      const card = await res.json() as {
+        name?: string;
+        description?: string;
+        skills?: Array<{ name?: string; id?: string }>;
+        capabilities?: { streaming?: boolean };
+      };
+      const skills = (card.skills ?? []).map((s) => s.name || s.id || "?").join(", ");
       const caps = card.capabilities ?? {};
       const text =
         `Agent: ${card.name || agent}\n` +
@@ -148,15 +176,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: "text", text: "agent, message, and group_id are all required" }], isError: true };
     }
     try {
-      const payload: any = { agent: targetAgent, message, group_id: groupID };
+      const payload: Record<string, string> = { agent: targetAgent, message, group_id: groupID };
       if (contextId) payload.context_id = contextId;
-      const res = await fetch(`${BRIDGE_URL}/a2a/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetchWithTimeout(
+        `${bridgeUrl}/a2a/send`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          timeoutMs: 120000,
+        },
+        _fetch,
+      );
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => "")}`);
-      const data: any = await res.json();
+      const data = await res.json() as { status?: string; error?: string; response?: string };
       if (data.status !== "completed") {
         return { content: [{ type: "text", text: `Task failed: ${data.error || data.status}` }], isError: true };
       }
@@ -168,8 +201,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === "a2a_bridge_status") {
     try {
-      const res = await fetch(`${BRIDGE_URL}/a2a/groups`, { signal: AbortSignal.timeout(5000) });
-      return { content: [{ type: "text", text: res.ok ? "Bridge is online." : `Bridge returned HTTP ${res.status}.` }] };
+      const res = await fetchWithTimeout(`${bridgeUrl}/a2a/groups`, { timeoutMs: 5000 }, _fetch);
+      return {
+        content: [{ type: "text", text: res.ok ? "Bridge is online." : `Bridge returned HTTP ${res.status}.` }],
+        isError: !res.ok,
+      };
     } catch (err: any) {
       return { content: [{ type: "text", text: `Bridge unreachable: ${err.message}` }], isError: true };
     }
@@ -177,11 +213,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === "a2a_update_known_agents") {
     try {
-      const agents = args.agents as string[];
-      const path = resolve(CONFIG_PATH);
-      const raw = JSON.parse(readFileSync(path, "utf-8"));
+      const agents = args.agents;
+      if (!Array.isArray(agents) || !agents.every((a) => typeof a === "string")) {
+        return { content: [{ type: "text", text: "agents must be an array of strings" }], isError: true };
+      }
+      const path = resolve(configPath);
+      const raw = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
       raw.known_agents = agents;
-      writeFileSync(path, JSON.stringify(raw, null, 2) + "\n");
+      const tmpPath = `${path}.tmp.${Date.now()}`;
+      writeFileSync(tmpPath, JSON.stringify(raw, null, 2) + "\n");
+      renameSync(tmpPath, path);
       return { content: [{ type: "text", text: `Updated known_agents to: ${agents.join(", ")}. Restart bridge to apply.` }] };
     } catch (err: any) {
       return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
@@ -189,6 +230,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   throw new Error(`Unknown tool: ${name}`);
+}
+
+const server = new Server(
+  { name: "a2a-bridge-mcp", version: "1.0.0" },
+  { capabilities: { tools: {} } },
+);
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  return handleToolCall(request.params.name, request.params.arguments ?? {});
 });
 
 async function main() {

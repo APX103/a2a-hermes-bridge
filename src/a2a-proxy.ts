@@ -1,6 +1,12 @@
 import { createServer, IncomingMessage, ServerResponse } from "http";
 import type { BridgeConfig, SessionStore } from "./types";
 
+export interface HealthStatus {
+  targetOk: boolean;
+  targetError?: string;
+  pollerRunning: boolean;
+}
+
 export interface A2AProxyOptions {
   config: BridgeConfig;
   platformClient: {
@@ -10,6 +16,7 @@ export interface A2AProxyOptions {
     listGroupAgents(groupID: string): Promise<any[]>;
   };
   sessionStore?: SessionStore;
+  getHealthStatus?: () => HealthStatus;
 }
 
 export class A2AProxyServer {
@@ -19,6 +26,7 @@ export class A2AProxyServer {
   private sessionStore?: SessionStore;
   private knownAgents: string[];
   private agentName: string;
+  private getHealthStatus?: () => HealthStatus;
 
   constructor(opts: A2AProxyOptions) {
     this.port = opts.config.a2a_proxy_port;
@@ -26,12 +34,21 @@ export class A2AProxyServer {
     this.sessionStore = opts.sessionStore;
     this.knownAgents = opts.config.known_agents;
     this.agentName = opts.config.agent_name;
+    this.getHealthStatus = opts.getHealthStatus;
   }
 
   start() {
     this.server.listen(this.port, "127.0.0.1", () => {
       console.log(`[A2A-PROXY] listening on http://127.0.0.1:${this.port}`);
     });
+    // Self-check: verify platform connectivity shortly after startup
+    setTimeout(() => {
+      this.platformClient.listGroups().then(() => {
+        console.log("[A2A-PROXY] platform connection OK");
+      }).catch((err: any) => {
+        console.warn(`[A2A-PROXY] platform check failed: ${err?.message ?? err}`);
+      });
+    }, 1000);
   }
 
   stop() {
@@ -39,12 +56,28 @@ export class A2AProxyServer {
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse) {
-    const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
+    const host = req.headers.host || "localhost";
+    const url = new URL(req.url ?? "/", `http://${host}`);
     const pathname = url.pathname;
 
     res.setHeader("Content-Type", "application/json");
 
     try {
+      // Health check
+      if (pathname === "/health" && req.method === "GET") {
+        const health = this.getHealthStatus ? this.getHealthStatus() : { targetOk: true, pollerRunning: true };
+        const ok = health.targetOk;
+        res.writeHead(ok ? 200 : 503);
+        res.end(JSON.stringify({
+          status: ok ? "ok" : "degraded",
+          bridge: "running",
+          target: ok ? "connected" : (health.targetError ?? "unreachable"),
+          poller: health.pollerRunning ? "running" : "paused",
+          timestamp: new Date().toISOString(),
+        }));
+        return;
+      }
+
       // Legacy endpoint: list known agents from config
       if (pathname === "/a2a/agents" && req.method === "GET") {
         const cards = await Promise.all(
@@ -126,11 +159,18 @@ export class A2AProxyServer {
   }
 }
 
-function readBody(req: IncomingMessage): Promise<string> {
+function readBody(req: IncomingMessage, maxBytes = 10 * 1024 * 1024): Promise<string> {
   return new Promise((resolve, reject) => {
     let body = "";
-    req.on("data", (chunk) => { body += chunk; });
-    req.on("end", () => resolve(body));
-    req.on("error", reject);
+    const timeout = setTimeout(() => reject(new Error("read body timeout")), 10000);
+    req.on("data", (chunk: string) => {
+      body += chunk;
+      if (Buffer.byteLength(body, "utf8") > maxBytes) {
+        clearTimeout(timeout);
+        reject(new Error("request body too large"));
+      }
+    });
+    req.on("end", () => { clearTimeout(timeout); resolve(body); });
+    req.on("error", (err) => { clearTimeout(timeout); reject(err); });
   });
 }

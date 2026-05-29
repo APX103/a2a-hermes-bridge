@@ -30,8 +30,11 @@ async function main() {
     timeoutMs: config.hermes_timeout_ms,
   });
 
-  const health = await hermesClient.healthCheck();
-  if (!health.ok) { console.error(`[FATAL] Hermes not reachable at ${config.hermes_url}`); process.exit(1); }
+  const startupHealth = await hermesClient.healthCheck();
+  if (!startupHealth.ok) {
+    console.error(`[FATAL] Hermes not reachable at ${config.hermes_url}: ${startupHealth.error}`);
+    process.exit(1);
+  }
   console.log(`[OK] Hermes connected`);
 
   const sessionStore = createSessionStore(config.session_store);
@@ -46,11 +49,57 @@ async function main() {
     maxWorkers: config.pull.max_workers,
   });
 
-  const a2aProxy = new A2AProxyServer({ config, platformClient, sessionStore });
+  // Runtime health monitor
+  const healthIntervalMs = Number(process.env.HERMES_HEALTH_INTERVAL_MS) || 30000;
+  let lastHermesOk = true;
+  let lastHermesError: string | undefined;
+  let healthPaused = false;
+  let shuttingDown = false;
+  let consecutiveFailures = 0;
+  let consecutiveSuccesses = 0;
+  const failureThreshold = 2;
+  const successThreshold = 2;
+
+  const healthTimer = setInterval(async () => {
+    if (shuttingDown) return;
+    const result = await hermesClient.healthCheck();
+    lastHermesOk = result.ok;
+    lastHermesError = result.error;
+    if (!result.ok) {
+      consecutiveSuccesses = 0;
+      consecutiveFailures++;
+      if (consecutiveFailures >= failureThreshold && !healthPaused) {
+        console.error(`[HEALTH] Hermes unreachable (${result.error}), pausing poller`);
+        poller.stop();
+        healthPaused = true;
+      }
+    } else {
+      consecutiveFailures = 0;
+      consecutiveSuccesses++;
+      if (consecutiveSuccesses >= successThreshold && healthPaused) {
+        console.log(`[HEALTH] Hermes recovered, resuming poller`);
+        poller.start();
+        healthPaused = false;
+      }
+    }
+  }, healthIntervalMs);
+
+  const a2aProxy = new A2AProxyServer({
+    config,
+    platformClient,
+    sessionStore,
+    getHealthStatus: () => ({
+      targetOk: lastHermesOk,
+      targetError: lastHermesError,
+      pollerRunning: poller.isRunning(),
+    }),
+  });
   a2aProxy.start();
 
   const shutdown = async () => {
     console.log("[STOP] shutting down...");
+    shuttingDown = true;
+    clearInterval(healthTimer);
     poller.stop();
     a2aProxy.stop();
     await platformClient.deregister(config.agent_name).catch(() => {});

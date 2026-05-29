@@ -41,7 +41,13 @@ export class PullPoller {
     this.running = false;
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.pollTimer = null;
+    this.heartbeatTimer = null;
     console.log("[PULL] stopped");
+  }
+
+  isRunning(): boolean {
+    return this.running;
   }
 
   private async doPoll(): Promise<void> {
@@ -51,8 +57,8 @@ export class PullPoller {
       if (messages.length === 0) return;
       for (const msg of messages) {
         if (this.processedIds.has(msg.delivery_id)) continue;
+        if (this.activeWorkers >= this.config.maxWorkers) break;
         this.processedIds.set(msg.delivery_id, Date.now());
-        if (this.activeWorkers >= this.config.maxWorkers) continue;
         this.activeWorkers++;
         this.processMessage(msg).finally(() => { this.activeWorkers--; });
       }

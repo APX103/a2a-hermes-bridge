@@ -89,10 +89,12 @@ export class PlatformClient {
   }
 
   async heartbeat(agentName: string): Promise<void> {
-    await fetch(`${this.baseUrl}/api/agents/${agentName}/heartbeat`, {
+    const res = await fetch(`${this.baseUrl}/api/agents/${agentName}/heartbeat`, {
       method: "POST", headers: this.headers(),
       body: JSON.stringify({ status: "ready", timestamp: new Date().toISOString() }),
+      signal: AbortSignal.timeout(10000),
     });
+    if (!res.ok) throw new Error(`Heartbeat failed: ${res.status}`);
   }
 
   async deregister(agentName: string): Promise<void> {
