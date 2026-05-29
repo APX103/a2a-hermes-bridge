@@ -36,7 +36,7 @@ export class PlatformClient {
   }
 
   private headers(): Record<string, string> {
-    return { "Content-Type": "application/json" };
+    return { "Content-Type": "application/json", "X-A2A-Agent-Secret": this.secret };
   }
 
   async registerAsPull(config: {
