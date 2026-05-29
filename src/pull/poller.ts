@@ -89,7 +89,11 @@ export class PullPoller {
   }
 
   private async doHeartbeat(): Promise<void> {
-    try { await this.platformClient.heartbeat(this.config.agentName); }
-    catch (err: any) { console.warn(`[PULL] heartbeat failed: ${err.message}`); }
+    try {
+      await this.platformClient.heartbeat(this.config.agentName);
+      console.log(`[PULL] heartbeat OK agent=${this.config.agentName}`);
+    } catch (err: any) {
+      console.warn(`[PULL] heartbeat failed: ${err.message}`);
+    }
   }
 }
